@@ -1,0 +1,27 @@
+{
+  "name": "@starbase/webrtc",
+  "version": "0.0.1",
+  "description": "Starbase WebRTC Connections",
+  "main": "webrtc.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/starbasealpha/webrtc.git"
+  },
+  "keywords": [
+    "webrtc",
+    "starbase",
+    "realtime",
+    "communications",
+    "direct",
+    "connection"
+  ],
+  "author": "Mike Fuller",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/starbasealpha/webrtc/issues"
+  },
+  "homepage": "https://github.com/starbasealpha/webrtc#readme"
+}
