@@ -80,6 +80,7 @@ function WEBRTC(send, stunURLs=[]) {
             "id": id,
             "to": to.toString(),
             "type": "call",
+            "stream": (stream) ? true : false,
             "call": pc.localDescription
           });
           resolve(calls[id]);
