@@ -72,10 +72,11 @@ function WEBRTC(send, stunURLs=[]) {
 
       pc.createOffer().then(function(e) {
         pc.setLocalDescription(e);
+        let timer = null;
         pc.onicecandidate = (e) => {
+          clearTimeout(timer);
           if (e.candidate) {
-            return null;
-          }
+            timer = setTimeout(()=>{
           send({
             "id": id,
             "to": to.toString(),
@@ -83,6 +84,9 @@ function WEBRTC(send, stunURLs=[]) {
             "stream": (stream) ? true : false,
             "call": pc.localDescription
           });
+            }, 1000);
+            return null;
+          }
           resolve(calls[id]);
         };
       });
@@ -130,14 +134,13 @@ function WEBRTC(send, stunURLs=[]) {
             return null;
           }
           send({
-            "id": call.id,
-            "to":to,
+            "id": id,
+            "to": to.toString(),
             "type": "answer",
             "answer": answerDesc
           });
           resolve(call[id]);
-        };
-
+        }
       }, () => {
         ////////////////////////
         console.warn("Couldn't create offer")
