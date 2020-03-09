@@ -29,23 +29,35 @@ function WEBRTC(send, stunURLs = []) {
 
   const ChannelAdded = (e, pc, id) => {
     let label = e.channel.label;
-    calls[id].data[label] = e.channel;
-    calls[id].data[label].onopen = (e) => {
+    calls[id].channels[label] = e.channel;
+    calls[id].channels[label].onopen = (e) => {
       ChannelOpen(e, pc, id);
     };
-    return calls[id].data[label];
+    return calls[id].channels[label];
   };
 
-  const TrackAdded = (e, pc, id) => {
+  const remoteTrackAdded = (e, pc, id) => {
     if (!calls[id].remoteTracks) {
       calls[id].remoteTracks = [];
     }
     calls[id].remoteTracks.push(e.track);
     stateHandler(calls[id], {
-      "type": "track",
+      "type": "remoteTrack",
       "track": e.track,
-      "message": "Media track added"
+      "message": "Remote media track added"
     });
+  };
+
+  const localTrackAdded = (stream, pc, id) => {
+    for (let track of stream.getTracks()) {
+      pc.addTrack(track);
+      calls[id].localTracks.push(track);
+      stateHandler(calls[id], {
+        "type":"localTrack",
+        "track": track,
+        "message":"Local media track added"
+      });
+    }
   };
 
   const Disconnected = (e, pc, id) => {
@@ -65,12 +77,12 @@ function WEBRTC(send, stunURLs = []) {
       calls[id] = {
         id,
         pc,
-        "data":{},
+        "channels":{},
         "localTracks":[],
         "remoteTracks":[]
       };
-      calls[id].data.chat = pc.createDataChannel('chat');
-      calls[id].data.chat.onopen = (e) => {
+      calls[id].channels.chat = pc.createDataChannel('chat');
+      calls[id].channels.chat.onopen = (e) => {
         ChannelOpen(e, pc, id);
       };
 
@@ -79,10 +91,7 @@ function WEBRTC(send, stunURLs = []) {
       };
 
       if (stream) {
-        for (let track of stream.getTracks()) {
-          pc.addTrack(track);
-          calls[id].localTracks.push(track);
-        }
+        localTrackAdded(stream, pc, id);
       }
 
       pc.ondatachannel = (e) => {
@@ -90,10 +99,11 @@ function WEBRTC(send, stunURLs = []) {
       };
 
       pc.ontrack = (e) => {
-        TrackAdded(e, pc, id);
+        remoteTrackAdded(e, pc, id);
       };
 
       pc.createOffer().then(desc => {
+
         pc.setLocalDescription(desc);
         send({
           "id": id,
@@ -104,24 +114,25 @@ function WEBRTC(send, stunURLs = []) {
             "desc": pc.localDescription
           }
         });
+
         pc.onicecandidate = (e) => {
           if (e.candidate) {
             send({
               "id": id,
               "to": to.toString(),
               "type": "call",
-              "stream": (stream) ? true : false,
               "call": {
                 "candidate": e.candidate
               }
             });
           }
-        resolve(calls[id]);
         };
+
+        resolve(calls[id]);
+
       });
     });
   }
-
 
   // ANSWER
 
@@ -143,16 +154,13 @@ function WEBRTC(send, stunURLs = []) {
       calls[id] = {
         id,
         pc,
-        "data": {},
+        "channels": {},
         "localTracks":[],
         "remoteTracks":[]
       };
 
       if (stream) {
-        for (let track of stream.getTracks()) {
-          pc.addTrack(track);
-          calls[id].localTracks.push(track);
-        }
+        localTrackAdded(stream, pc, id);
       }
 
       pc.ondatachannel = (e) => {
@@ -160,7 +168,7 @@ function WEBRTC(send, stunURLs = []) {
       };
 
       pc.ontrack = (e) => {
-        TrackAdded(e, pc, id);
+        remoteTrackAdded(e, pc, id);
       };
 
       if (!call.call.desc) {
@@ -171,6 +179,7 @@ function WEBRTC(send, stunURLs = []) {
       await pc.setRemoteDescription(call.call.desc||null);
 
       pc.createAnswer().then(async answerDesc=>{
+
         await pc.setLocalDescription(answerDesc);
         send({
           "id": id,
@@ -180,6 +189,7 @@ function WEBRTC(send, stunURLs = []) {
             "desc": answerDesc
           }
         });
+
         pc.onicecandidate = (e) => {
           if (e.candidate) {
             send({
@@ -191,8 +201,10 @@ function WEBRTC(send, stunURLs = []) {
               }
             });
           }
-        }
-        resolve(call[id]);
+        };
+
+        resolve(calls[id]);
+
       });
     });
   }
@@ -208,6 +220,7 @@ function WEBRTC(send, stunURLs = []) {
       await conn.pc.addIceCandidate(answer.answer.candidate).catch(err=>{return null;});
       return null;
     }
+
     const answerDesc = new RTCSessionDescription(answer.answer.desc || null);
     conn.pc.setRemoteDescription(answerDesc);
   }
