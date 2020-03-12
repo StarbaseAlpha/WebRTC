@@ -73,7 +73,7 @@ function WEBRTC(send, stunURLs = []) {
     });
   };
 
-  function PEER(id, stream) {
+  function PEER(id, to) {
 
     let pc = new RTCPeerConnection(config);
 
@@ -91,6 +91,7 @@ function WEBRTC(send, stunURLs = []) {
 
     let call = {
       id,
+      "to":to.toString(),
       pc,
       "channels":{},
       "localTracks":[],
@@ -102,18 +103,14 @@ function WEBRTC(send, stunURLs = []) {
     return call;
   }
 
-
-
   // CALL
-
-  
 
   function CALL(to, stream = null) {
     return new Promise(async (resolve, reject) => {
 
-      let id = crypto.getRandomValues(new Uint8Array(32)).join('').toString().slice(0, 16);
+      let id = crypto.getRandomValues(new Uint8Array(128)).join('').toString().slice(32, 96);
 
-      calls[id] = PEER(id, stream);
+      calls[id] = PEER(id, to);
       let pc = calls[id].pc;
 
       calls[id].channels.chat = calls[id].pc.createDataChannel('chat');
@@ -125,30 +122,22 @@ function WEBRTC(send, stunURLs = []) {
         localTrackAdded(stream, pc, id);
       }
 
-      calls[id].pc.createOffer().then(desc => {
-        calls[id].pc.setLocalDescription(desc);
-        calls[id].pc.onicecandidate = (e) => {
-          if (e.candidate) {
-            return null;
+      calls[id].pc.createOffer().then(async desc => {
+        await calls[id].pc.setLocalDescription(desc);
+        send({
+          "id": id,
+          "to": to,
+          "type": "call",
+          "stream": (stream) ? true : false,
+          "call": {
+            "desc": calls[id].pc.localDescription
           }
-          send({
-            "id": id,
-            "to": to.toString(),
-            "type": "call",
-            "stream": (stream) ? true : false,
-            "call": {
-              "desc": calls[id].pc.localDescription
-            }
-          });
-          resolve(calls[id]);
-        };
-
-/*
+        });
         calls[id].pc.onicecandidate = (e) => {
           if (e.candidate) {
             send({
               "id": id,
-              "to": to.toString(),
+              "to": to,
               "type": "call",
               "call": {
                 "candidate": e.candidate
@@ -156,11 +145,33 @@ function WEBRTC(send, stunURLs = []) {
             });
           }
         };
-*/
-        //resolve(calls[id]);
-
+        resolve(calls[id]);
       });
+
     });
+  }
+
+  // LISTEN
+
+  async function LISTEN(call) {
+    if (!call && !call.id && !call.type === 'call') {
+      return null;
+    }
+
+    if (!calls[call.id]) {
+      calls[call.id] = PEER(call.id, call.from);
+    }
+
+    if (call.call.desc) {
+      const offerDesc = new RTCSessionDescription(call.call.desc);
+      await calls[call.id].pc.setRemoteDescription(offerDesc);
+      stateHandler(calls[call.id], {"type":"incoming", "call":call});
+    }
+
+    if (call.call.candidate) {
+      await calls[call.id].pc.addIceCandidate(new RTCIceCandidate(call.call.candidate)).catch(err=>{console.log(err);return null;});
+    }
+
   }
 
   // ANSWER
@@ -168,58 +179,31 @@ function WEBRTC(send, stunURLs = []) {
   function ANSWER(call, stream) {
     return new Promise(async (resolve, reject) => {
 
-      if (!call && !call.id && !call.type === 'call') {
-        return null;
-      }
-
-      let id = call.id;
-      let to = call.from;
+      let id = call.id || null;
 
       if (!calls[id]) {
-        calls[id] = PEER(id, stream);
+        return null;
       }
-
-      let pc = calls[id].pc;
 
       if (stream) {
-        localTrackAdded(stream, pc, id);
+        localTrackAdded(stream, calls[id].pc, id);
       }
-
-      if (calls[call.id] && call.call && call.call.candidate) {
-        await calls[call.id].pc.addIceCandidate(call.call.candidate || null).catch(err=>{return null;});
-        return null;
-      }
-
-      if (!call.call.desc) {
-        return null;
-      }
-
-      const offerDesc = new RTCSessionDescription(call.call.desc || null);
-      await calls[id].pc.setRemoteDescription(call.call.desc||null);
 
       calls[id].pc.createAnswer().then(async answerDesc=>{
         await calls[id].pc.setLocalDescription(answerDesc);
-        calls[id].pc.onicecandidate = (e) => {
-          if (e.candidate) {
-            return null;
+        send({
+          "id": id,
+          "to": calls[id].to,  
+          "type": "answer",
+          "answer": {
+            "desc": answerDesc
           }
-          send({
-            "id": id,
-            "to": to.toString(),
-            "type": "answer",
-            "answer": {
-              "desc": answerDesc
-            }
-          });
-          resolve(calls[id]);
-        };
-
-/*
+        });
         calls[id].pc.onicecandidate = (e) => {
           if (e.candidate) {
             send({
               "id": id,
-              "to": to.toString(),
+              "to": calls[id].to,
               "type": "answer",
               "call": {
                 "candidate": e.candidate
@@ -227,10 +211,9 @@ function WEBRTC(send, stunURLs = []) {
             });
           }
         };
-
         resolve(calls[id]);
-*/
       });
+
     });
   }
 
@@ -241,19 +224,22 @@ function WEBRTC(send, stunURLs = []) {
       return null;
     }
     const conn = calls[answer.id];
-    if (answer.answer && answer.answer.candidate) {
-      await conn.pc.addIceCandidate(answer.answer.candidate).catch(err=>{return null;});
-      return null;
-    }
+
     if (answer.answer && answer.answer.desc) {
-      const answerDesc = new RTCSessionDescription(answer.answer.desc || null);
-      conn.pc.setRemoteDescription(answerDesc);
+      const answerDesc = new RTCSessionDescription(answer.answer.desc);
+      await conn.pc.setRemoteDescription(answerDesc);
     }
+
+    if (answer.answer && answer.answer.candidate) {
+      await conn.pc.addIceCandidate(new RTCIceCandidate(answer.answer.candidate)).catch(err=>{console.log(err);return null;});
+    }
+
   }
 
   return {
     "calls": calls,
     "call": CALL,
+    "listen": LISTEN,
     "answer": ANSWER,
     "gotAnswer": gotAnswer,
     "onState": (cb) => {
