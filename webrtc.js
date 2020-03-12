@@ -126,27 +126,21 @@ function WEBRTC(send, stunURLs = []) {
       }
 
       calls[id].pc.createOffer().then(desc => {
-
         calls[id].pc.setLocalDescription(desc);
-
-        let timer = null;
         calls[id].pc.onicecandidate = (e) => {
           if (e.candidate) {
-            clearTimeout(timer);
-            timer = setTimeout(()=>{
-              send({
-                "id": id,
-                "to": to.toString(),
-                "type": "call",
-                "stream": (stream) ? true : false,
-                "call": {
-                  "desc": calls[id].pc.localDescription
-                }
-              });
-              resolve(calls[id]);
-            }, 1000);
+            return null;
           }
-          return null;
+          send({
+            "id": id,
+            "to": to.toString(),
+            "type": "call",
+            "stream": (stream) ? true : false,
+            "call": {
+              "desc": calls[id].pc.localDescription
+            }
+          });
+          resolve(calls[id]);
         };
 
 /*
@@ -204,36 +198,20 @@ function WEBRTC(send, stunURLs = []) {
       await calls[id].pc.setRemoteDescription(call.call.desc||null);
 
       calls[id].pc.createAnswer().then(async answerDesc=>{
-
         await calls[id].pc.setLocalDescription(answerDesc);
-/*
-        send({
-          "id": id,
-          "to": to.toString(),
-          "type": "answer",
-          "answer": {
-            "desc": answerDesc
-          }
-        });
-*/
-        let timer = null;
         calls[id].pc.onicecandidate = (e) => {
           if (e.candidate) {
-            clearTimeout(timer);
-            timer = setTimeout(()=>{
-              send({
-                "id": id,
-                "to": to.toString(),
-                "type": "answer",
-                "answer": {
-                  "desc": answerDesc
-                }
-              });
-
-              resolve(calls[id]);
-            }, 1000);
+            return null;
           }
-          return null;
+          send({
+            "id": id,
+            "to": to.toString(),
+            "type": "answer",
+            "answer": {
+              "desc": answerDesc
+            }
+          });
+          resolve(calls[id]);
         };
 
 /*
