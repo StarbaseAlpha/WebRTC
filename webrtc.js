@@ -10,6 +10,9 @@ function WEBRTC(configuration = null) {
 
   const peer = new RTCPeerConnection(config);
 
+  let dataChannels = {};
+  let tracks = {};
+
   let sendHandler = null;
 
   const onSend = (cb) => {
@@ -22,26 +25,38 @@ function WEBRTC(configuration = null) {
     }
   };
 
-  let eventHandler = null;
+  let dataChannelHandler = null;
 
-  const onEvent = (cb) => {
-    eventHandler = cb;
+  const onDataChannel = (cb) => {
+    dataChannelHandler = cb;
   };
 
-  const Event = (m) => {
-    if (eventHandler && typeof eventHandler === 'function') {
-      eventHandler(m);
-    }
+  let trackHandler = null;
+
+  const onTrack = (cb) => {
+    trackHandler = cb;
+  };
+
+  let connectedHandler = null;
+
+  const onConnected = (cb) => {
+    connectedHandler = cb;
+  };
+
+  let disconnectedHandler = null;
+
+  const onDisconnected = (cb) => {
+    disconnectedHandler = cb;
   };
 
   peer.oniceconnectionstatechange = (e) => {
-    if (e.target.iceConnectionState === 'connected') {
-      Event({
+    if (e.target.iceConnectionState === 'connected' && connectedHandler && typeof connectedHandler === 'function') {
+      connectedHandler({
         "type": "connected"
       });
     }
-    if (e.target.iceConnectionState === 'disconnected') {
-      Event({
+    if (e.target.iceConnectionState === 'disconnected' && disconnectedHandler && typeof disconnectedHandler === 'function') {
+      disconnectedHandler({
         "type": "disconnected"
       });
     }
@@ -63,11 +78,24 @@ function WEBRTC(configuration = null) {
   };
 
   peer.ondatachannel = (e => {
-    Event(e);
+    if (dataChannelHandler && typeof dataChannelHandler === 'function') {
+      dataChannelHandler(e);
+    }
+    dataChannels[e.channel.label] = e.channel;
   });
 
   peer.ontrack = (e) => {
-    Event(e);
+    if (trackHandler && typeof trackHandler === 'function') {
+      trackHandler(e);
+    }
+    tracks[e.track.id] = e.track;
+  };
+
+  const Close = () => {
+    peer.close();
+    disconnectedHandler({
+      "type": "disconnected"
+    });
   };
 
   const Listen = async ({
@@ -94,21 +122,29 @@ function WEBRTC(configuration = null) {
     }
   };
 
-  const AddTrack = async (track, stream) => {
-    await peer.addTrack(track, stream);
+  const AddTrack = (track, stream) => {
+    return peer.addTrack(track, stream);
   };
 
-  const CreateDataChannel = async (label = null, options = {}) => {
-    return peer.createDataChannel(label, options);
+  const CreateDataChannel = (label = null, options = {}) => {
+    let dataChannel = peer.createDataChannel(label, options);
+    dataChannels[label] = dataChannel;
+    return dataChannel;
   };
 
   return {
-    "pc": peer,
+    "peerConnection": peer,
     "createDataChannel": CreateDataChannel,
     "addTrack": AddTrack,
     "listen": Listen,
     "onSend": onSend,
-    "onEvent": onEvent
+    "onTrack": onTrack,
+    "onDataChannel": onDataChannel,
+    "onConnected": onConnected,
+    "onDisconnected": onDisconnected,
+    "tracks": tracks,
+    "dataChannels": dataChannels,
+    "close":Close
   };
 
 }
