@@ -93,9 +93,11 @@ function WEBRTC(configuration = null) {
 
   const Close = () => {
     peer.close();
-    disconnectedHandler({
-      "type": "disconnected"
-    });
+    if (disconnectedHandler && typeof disconnectedHandler === 'function') {
+      disconnectedHandler({
+        "type": "disconnected"
+      });
+    }
   };
 
   const Listen = async ({
