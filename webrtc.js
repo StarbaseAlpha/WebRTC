@@ -4,7 +4,7 @@ function WEBRTC(configuration = null, polite = false) {
 
   const config = configuration || {
     iceServers: [{
-      "urls": ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302", "stun:stun4.l.google.com:19302"]
+      "urls": ["stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"]
     }]
   };
 
@@ -69,12 +69,12 @@ function WEBRTC(configuration = null, polite = false) {
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
-      await pc.setLocalDescription();
+      await pc.setLocalDescription().then().catch(error);
       send({
         "description": pc.localDescription
       });
     } catch (err) {
-      console.error(err);
+      error(err);
     } finally {
       makingOffer = false;
     }
@@ -111,16 +111,16 @@ function WEBRTC(configuration = null, polite = false) {
           return;
         }
 
-        await pc.setRemoteDescription(description);
+        await pc.setRemoteDescription(description).then().catch(error);
         if (description.type == "offer") {
-          await pc.setLocalDescription();
+          await pc.setLocalDescription().then().catch(error);
           send({
             "description": pc.localDescription
           });
         }
       } else if (candidate) {
         try {
-          await pc.addIceCandidate(candidate);
+          await pc.addIceCandidate(candidate).then().catch(error);
         } catch (err) {
           if (!ignoreOffer) {
             throw err;
@@ -128,7 +128,7 @@ function WEBRTC(configuration = null, polite = false) {
         }
       }
     } catch (err) {
-      console.error(err);
+      error(err);
     }
 
   };
