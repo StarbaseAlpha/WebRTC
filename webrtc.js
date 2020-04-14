@@ -1,6 +1,6 @@
 'use strict';
 
-function WEBRTC(configuration = null) {
+function WEBRTC(configuration = null, polite = false) {
 
   const config = configuration || {
     iceServers: [{
@@ -8,48 +8,51 @@ function WEBRTC(configuration = null) {
     }]
   };
 
-  const peer = new RTCPeerConnection(config);
-
-  let dataChannels = {};
-  let tracks = {};
+  const pc = new RTCPeerConnection(config);
 
   let sendHandler = null;
-
   const onSend = (cb) => {
     sendHandler = cb;
   };
-
   const send = (e) => {
     if (sendHandler && typeof sendHandler === 'function') {
       sendHandler(e);
     }
   };
 
-  let dataChannelHandler = null;
-
-  const onDataChannel = (cb) => {
-    dataChannelHandler = cb;
+  let errorHandler = null;
+  const onError = (cb) => {
+    errorHandler = cb;
   };
-
-  let trackHandler = null;
-
-  const onTrack = (cb) => {
-    trackHandler = cb;
+  const error = (err) => {
+    if (errorHandler && typeof errorHandler === 'function') {
+      errorHandler(err);
+    }
   };
 
   let connectedHandler = null;
-
   const onConnected = (cb) => {
     connectedHandler = cb;
   };
 
   let disconnectedHandler = null;
-
   const onDisconnected = (cb) => {
     disconnectedHandler = cb;
   };
 
-  peer.oniceconnectionstatechange = (e) => {
+  let dataChannels = {};
+  let dataChannelHandler = null;
+  const onDataChannel = (cb) => {
+    dataChannelHandler = cb;
+  };
+
+  let tracks = {};
+  let trackHandler = null;
+  const onTrack = (cb) => {
+    trackHandler = cb;
+  };
+
+  pc.oniceconnectionstatechange = (e) => {
     if (e.target.iceConnectionState === 'connected' && connectedHandler && typeof connectedHandler === 'function') {
       connectedHandler({
         "type": "connected"
@@ -62,37 +65,86 @@ function WEBRTC(configuration = null) {
     }
   };
 
-  peer.onnegotiationneeded = async (e) => {
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer),
+  let makingOffer = false;
+  pc.onnegotiationneeded = async () => {
+    try {
+      makingOffer = true;
+      await pc.setLocalDescription();
       send({
-        "description": peer.localDescription.toJSON()
-      })
-    peer.onicecandidate = async (e) => {
-      if (e.candidate) {
-        send({
-          "candidate": e.candidate.toJSON()
-        });
-      }
-    };
+        "description": pc.localDescription
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      makingOffer = false;
+    }
   };
 
-  peer.ondatachannel = (e => {
+  pc.onicecandidate = ({candidate}) => send({"candidate":candidate});
+
+  pc.ondatachannel = (e => {
     if (dataChannelHandler && typeof dataChannelHandler === 'function') {
       dataChannelHandler(e);
     }
     dataChannels[e.channel.label] = e.channel;
   });
 
-  peer.ontrack = (e) => {
+  pc.ontrack = (e) => {
     if (trackHandler && typeof trackHandler === 'function') {
       trackHandler(e);
     }
     tracks[e.track.id] = e.track;
   };
 
+  let ignoreOffer = false;
+  const Listen = async ({
+    description,
+    candidate
+  }) => {
+
+    try {
+      if (description) {
+        const offerCollision = (description.type == "offer") && (makingOffer || pc.signalingState != "stable");
+
+        ignoreOffer = !polite && offerCollision;
+        if (ignoreOffer) {
+          return;
+        }
+
+        await pc.setRemoteDescription(description);
+        if (description.type == "offer") {
+          await pc.setLocalDescription();
+          send({
+            "description": pc.localDescription
+          });
+        }
+      } else if (candidate) {
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch (err) {
+          if (!ignoreOffer) {
+            throw err;
+          }
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+
+  };
+
+  const AddTrack = (track, stream) => {
+    return pc.addTrack(track, stream);
+  };
+
+  const CreateDataChannel = (label = null, options = {}) => {
+    let dataChannel = pc.createDataChannel(label, options);
+    dataChannels[label] = dataChannel;
+    return dataChannel;
+  };
+
   const Close = () => {
-    peer.close();
+    pc.close();
     if (disconnectedHandler && typeof disconnectedHandler === 'function') {
       disconnectedHandler({
         "type": "disconnected"
@@ -100,53 +152,20 @@ function WEBRTC(configuration = null) {
     }
   };
 
-  const Listen = async ({
-    description,
-    candidate
-  }) => {
-    if (description) {
-      await peer.setRemoteDescription(description);
-      if (description.type === 'offer') {
-        await peer.setLocalDescription(await peer.createAnswer());
-        send({
-          "description": peer.localDescription.toJSON()
-        })
-        peer.onicecandidate = async (e) => {
-          if (e.candidate) {
-            send({
-              "candidate": e.candidate.toJSON()
-            });
-          }
-        };
-      }
-    } else if (candidate) {
-      await peer.addIceCandidate(candidate);
-    }
-  };
-
-  const AddTrack = (track, stream) => {
-    return peer.addTrack(track, stream);
-  };
-
-  const CreateDataChannel = (label = null, options = {}) => {
-    let dataChannel = peer.createDataChannel(label, options);
-    dataChannels[label] = dataChannel;
-    return dataChannel;
-  };
-
   return {
-    "peerConnection": peer,
+    "peerConnection": pc,
     "createDataChannel": CreateDataChannel,
     "addTrack": AddTrack,
     "listen": Listen,
     "onSend": onSend,
+    "onError": onError,
     "onTrack": onTrack,
     "onDataChannel": onDataChannel,
     "onConnected": onConnected,
     "onDisconnected": onDisconnected,
     "tracks": tracks,
     "dataChannels": dataChannels,
-    "close":Close
+    "close": Close
   };
 
 }
