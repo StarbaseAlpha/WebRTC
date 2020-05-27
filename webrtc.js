@@ -63,6 +63,9 @@ function WEBRTC(configuration = null, polite = false) {
         "type": "disconnected"
       });
     }
+    if (e.target.iceConnectionState === "failed") {
+      pc.restartIce();
+    }
   };
 
   let makingOffer = false;
