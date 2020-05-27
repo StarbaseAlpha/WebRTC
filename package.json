@@ -1,6 +1,6 @@
 {
   "name": "@starbase/webrtc",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Starbase WebRTC Connections",
   "main": "webrtc.js",
   "scripts": {
