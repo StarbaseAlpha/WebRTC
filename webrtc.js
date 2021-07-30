@@ -72,7 +72,8 @@ function WEBRTC(configuration = null, polite = false) {
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
-      await pc.setLocalDescription().then().catch(error);
+      let offer = await pc.createOffer();
+      await pc.setLocalDescription(offer).then().catch(error);
       send({
         "description": pc.localDescription
       });
@@ -116,7 +117,8 @@ function WEBRTC(configuration = null, polite = false) {
 
         await pc.setRemoteDescription(description).then().catch(error);
         if (description.type == "offer") {
-          await pc.setLocalDescription().then().catch(error);
+          let answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer).then().catch(error);
           send({
             "description": pc.localDescription
           });
