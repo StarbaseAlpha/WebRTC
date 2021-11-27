@@ -1,8 +1,8 @@
 {
   "name": "@starbase/webrtc",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Starbase WebRTC Connections",
-  "main": "webrtc.js",
+  "browser":"webrtc.min.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
